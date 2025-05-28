@@ -177,6 +177,7 @@ class Loop:
       dbrdict.update({db.filepath:(db.title,db)})
       db=dbr.getnextdatabase
     return dbrdict
+      
   def docsitemcounts(dc=None,itmname='form'):
     aa={}
     if(dc==None):
@@ -206,7 +207,7 @@ class Loop:
       aa.get(iname).append(bb)
     return(aa)
 
-  def iterrecords(dc,func,*args,entries=False,details=True):
+  def iterrecords(dc,func,*args,entries=False,details=False):
     if(dc):
       idc=0
       if(entries):
@@ -216,8 +217,9 @@ class Loop:
           e1=dc.getfirstentry
         while e1:
           idc+=1
+          e2=dc.getnextentry(e1)
           yield (idc,e1,func(e1,*args) if func!=None else None) if details else func(e1,*args) if func!=None else None
-          e1=dc.getnextentry(e1)
+          e1=e2
       else:
         try:
           d1=dc.getfirstdocument()
@@ -225,13 +227,15 @@ class Loop:
           d1=dc.getfirstdocument
         while d1:
           idc+=1
+          d2=dc.getnextdocument(d1)
           yield (idc,d1,func(d1,*args) if func!=None else None) if details else func(d1,*args) if func!=None else None
-          d1=dc.getnextdocument(d1)
+          d1=d2
   def iternotes(nc,func,*args):
     n1=nc.getfirstnoteid
     while n1!='':
+      n2=nc.getnextnoteid(n1)
       yield func(e1,*args)
-      n1=nc.getnextnoteid(n1)
+      n1=n2
   def runondocs(dc,func,*args):
     if(dc and func):
       try:
@@ -241,28 +245,30 @@ class Loop:
         d1=dc.getfirstdocument
       while d1:
         try:
+          d2=dc.getnextdocument(d1)
           idc+=1
-          func(d1,*args)
           if(Loop.stop(d1.noteid,idc)):
             break
+          func(d1,*args)
         except Exception as e:
           print('ERR> ',d1.noteid,idc,e)	
           if(input('Do you wish to break it? (y)/n >')!='n'):
             break
-        d1=dc.getnextdocument(d1)
+        d1=d2
   def runonnotes(nc,func,*args):
     if(nc and func):
       n1=nc.getfirstnoteid
       while n1:
         try:
-          func(n1,*args)
+          n2=nc.getnextnoteid(n1)
           if(Loop.stop(n1)):
             break
+          func(n1,*args)
         except Exception as e:
           print('ERR> ',n1,e)	
           if(input('Do you wish to break it? (y)/n >')!='n'):
             break
-        n1=nc.getnextnoteid(n1)
+        n1=n2
   def runonentries(ec,func,*args):
     if(ec and func):
       try:
@@ -272,13 +278,14 @@ class Loop:
         e1=ec.getfirstentry
       while e1:
         try:
+          e2=ec.getnextentry(e1)
           idc+=1
-          func(e1,*args)
           if(Loop.stop(e1.noteid,idc)):
             break
+          func(e1,*args)
         except Exception as e:
           print('ERR> ',e1.noteid,idc,e)
-        e1=ec.getnextentry(e1)
+        e1=e2
   def stop(*args,key='ctrl+c'):
     try:
       import keyboard
