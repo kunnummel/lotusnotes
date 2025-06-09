@@ -36,7 +36,7 @@ class UIBack:
     try:
       if(UIBack._evaldoc==None):
         UIBack._evaldoc=UIBack.s.urldatabase.createdocument()
-      return UIBack.s.evaluate(formula,doc if doc else _evaldoc)
+      return UIBack.s.evaluate(formula,doc if doc else UIBack._evaldoc)
     except Exception as e:
       print(e)
 
@@ -170,7 +170,8 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
     import win32gui
     win32gui.EnumWindows(lambda hs,ars:win32gui.ShowWindow(hs,1) if('HCL Notes' == win32gui.GetWindowText(hs)) else None,None)
   def checkmail(cnt=5):
-    if(UI.db and (not UI.mdb)):
+    UI.init()
+    if(UI.s and (not UI.mdb)):
       UI.mdb=UI.s.getdatabase('','')
       if(not UI.mdb.isopen):
         UI.mdb.openmail
@@ -200,15 +201,15 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
   def verifydoc(doc):
     return doc.parentdatabase.parent==UI.s
 class Utils:
-  def getattachments(doc,nodetails=True):
-    att=[] if nodetails else {}
+  def getattachments(doc,details=False):
+    att={} if details else []
     if(doc.hasembedded):
       for x in doc.items:
         if(x.type==1084):
           for y in x.values:
             f=doc.getattachment(y)
-            att.append(f) if nodetails else att.update({f.name:(f,f.filesize,f.source)})
-    return (att if nodetails else (doc.noteid,att))
+            att.update({f.name:(f,f.filesize,f.source)}) if details else att.append(f)
+    return {doc.noteid:att} if details else att
 
   def dataframe(dcs=None):
     import pandas as pd
@@ -216,7 +217,15 @@ class Utils:
     return df.transpose()
   def dictupdatecounter(dictobj,key='',start=1,incr=1):
     dictobj.update({key:dictobj.setdefault(key,start)+incr})
-
+  def flatten(lst,result=[]):
+    for x in lst:
+      if(isinstance(x,(list,tuple,set))):
+        Utils.flatten(x,result)
+      elif(isinstance(x,dict)):
+        Utils.flatten((tuple(x.keys()),tuple(x.values())),result)
+      else:
+        result.append(str(x))
+    return result
 class Loop:
   def dbdirectory(server='',type=1247):
     dbr=UI.s.getdbdirectory(server)
@@ -265,7 +274,7 @@ class Loop:
     aa={}
     if(dc==None):
       dc=UI.vw
-    Loop.runondocs(dc,lambda x:[Utils.dictupdatecounter(aa,x.getitemvalue(y)[0]) for y in itms])
+    Loop.runondocs(dc,lambda x:[aa.update({x.getitemvalue(y)[0]:aa.dictobj.setdefault(x.getitemvalue(y)[0],1)+1}) for y in itms])
     if(len(aa)>0):
       return(aa)
     return None
@@ -319,7 +328,7 @@ class Loop:
           trec=coll.getnextdocument(rec) if forward else coll.getprevdocument(rec) 
         cb=func(rec,*args,**kwargs) if func!=None else rec
         aa=(idc,rec,cb) if details else cb
-        result.append(aa) if result else None
+        result.append(aa) if result!=None else None
         yield aa
         idc=idc+1 if forward else idc-1
         if(Loop.stop(rec.noteid,idc)):
@@ -329,7 +338,7 @@ class Loop:
     n1=nc.getfirstnoteid
     while n1!='':
       n2=nc.getnextnoteid(n1)
-      yield func(e1,*args)
+      yield func(n1,*args)
       n1=n2
   def runondocs(dc,func,*args,cbfunc=None,**kwargs):
     if(dc and func):
