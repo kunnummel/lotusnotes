@@ -137,13 +137,13 @@ class UI:
       UI.vw=UI.vw.view
       UI.vw.autoupdate=False
     UI.vn=UI.vw.createviewnav if UI.vw else None
-    UI.ve=(UI.vn.getentry(UI.doc) if UI.doc else UI.vn.getfirst) if UI.vn else None
+    UI.ve=(UI.vn.getentry(UI.doc) if UI.doc else UI.vn.getprev(UI.vw.getentrybykey(UI.ws.currentview.caretcategory,True))) if UI.vn else None
     if(UI.dc):
       UI.dcs=Loop.iterrecords(UI.dc,lambda x:({x.noteid:list(UI.vn.getentry(x).columnvalues)}))
     print(f'''
 UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid) if UI.db else 'n/a'}
 UI.vw > {(UI.vw.name,UI.vw.aliases,UI.vw.entrycount,UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UI.vw else 'n/a'}
-UI.vn/.ve> Position: {(UI.ve.getposition('.'),UI.ws.currentview.caretcategory) if UI.ve else 'n/a'} 
+UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'} Cursor Category - {UI.ws.currentview.caretcategory} 
 UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,UI.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UI.ve.columnvalues)} if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
 UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
 ''')
@@ -166,9 +166,19 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
       vw=UI.ws.currentview
       vw.selectdocument(doc)
       print(vw.caretcategory if vw.caretnoteid==doc.noteid else 'Document could not be located')
-  def shownoteswindows():
-    import win32gui
-    win32gui.EnumWindows(lambda hs,ars:win32gui.ShowWindow(hs,1) if('HCL Notes' == win32gui.GetWindowText(hs)) else None,None)
+  def showwindows(title='HCL Notes',nameit=False):
+    try:
+      import win32gui,win32process
+      listnames={}
+      def showMe(hs,*args):
+        st=win32gui.GetWindowText(hs)
+        listnames.setdefault(st, []).append([hs,win32process.GetWindowThreadProcessId(hs)])
+        if(not None==title and title in st):        
+          win32gui.ShowWindow(hs,1) if input(f'Show Window - {st} - (Process - {hs}) y/(n) >')=='y' else None
+      win32gui.EnumWindows(showMe,None)
+      if(nameit):
+        return dict(sorted(listnames.items()))
+    except:print('error')
   def checkmail(cnt=5):
     UI.init()
     if(UI.s and (not UI.mdb)):
@@ -340,6 +350,15 @@ class Loop:
       n2=nc.getnextnoteid(n1)
       yield func(n1,*args)
       n1=n2
+  def iternav(nv,func,*args,start=None,forward=True,samelevel=False):
+    n1=nv.getfirst if start==None else nv.getentry(start)
+    while n1:
+      if(samelevel):
+        n2=nv.getnextsibling(n1) if forward else nv.getprevsibling(n1)
+      else:
+        n2=nv.getnext(n1) if forward else nv.getprev(n1)
+      yield func(n1,*args)
+      n1=n2
   def runondocs(dc,func,*args,cbfunc=None,**kwargs):
     if(dc and func):
       try:
@@ -409,11 +428,11 @@ class Loop:
       while e1:
         try:
           e2=ec.getnextentry(e1)
-          if(Loop.stop(e1.noteid,idc)):
+          if(Loop.stop(e1,idc)):
             break
           idc.append(func(e1,*args,**kwargs))
         except Exception as e:
-          print('ERR> ',e1.noteid,idc,e)
+          print('ERR> ',e1,idc,e)
         e1=e2
       if(cbfunc):
         cbfunc(idc)
