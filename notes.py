@@ -65,9 +65,9 @@ class UIBack:
       UIBack.vw=UIBack.db.getView(UI.vw.name)
       UIBack.vw.autoupdate=False
       UIBack.vn=UIBack.vw.createviewnav()
+      UIBack.dc=UIBack.vw.getalldocumentsbykey('\n\n',True)
+      UIBack.dcs={}
       if(UI.dc.count>0 and input(f'Do you also would like to get the {UI.dc.count} documents selected at the UI view? (n)/y >') =='y'):
-        UIBack.dc=UIBack.vw.getalldocumentsbykey('\n\n',True)
-        UIBack.dcs={}
         Loop.runondocs(UI.dc,lambda x:UIBack.dc.adddocument(UIBack.db.getdocumentbyid(x.noteid)))
         def aa(x):
           UIBack.vn.gotoentry(x)
@@ -82,7 +82,7 @@ class UIBack:
       UIBack.ve=UIBack.vn.getcurrent()
     print(f'''
 UIBack.db > {(UIBack.db.server,UIBack.db.filepath,UIBack.db.title,UIBack.db.replicaid) if UIBack.db else 'n/a'}
-UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,UIBack.vw.entrycount,UIBack.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UIBack.vw else 'n/a'}
+UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UIBack.vw else 'n/a'}
 UIBack.vn/.ve> Position: {(UIBack.ve.getposition('.'),UI.ws.currentview.caretcategory) if UIBack.ve else 'n/a'} 
 UIBack.doc> {(UIBack.doc.getitemvalue("form")[0],UIBack.doc.universalid,UIBack.doc.noteid,UIBack.doc.size,UIBack.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UIBack.ve.columnvalues)} if UIBack.ve else ('new-doc' if UIBack.doc.isnewnote else 'items-'+str(len(UIBack.doc.items)))) if UIBack.doc else 'n/a'}
 UIBack.dc/.dcs > {UIBack.dc.count if UIBack.dc else 'n/a'}
@@ -142,11 +142,11 @@ class UI:
       UI.dcs=Loop.iterrecords(UI.dc,lambda x:({x.noteid:list(UI.vn.getentry(x).columnvalues)}))
     print(f'''
 UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid) if UI.db else 'n/a'}
-UI.vw > {(UI.vw.name,UI.vw.aliases,UI.vw.entrycount,UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UI.vw else 'n/a'}
-UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'} Cursor Category - {UI.ws.currentview.caretcategory} 
+UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UI.vw else 'n/a'}
+UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.vw else 'n/a'} 
 UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,UI.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UI.ve.columnvalues)} if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
 UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
-''')
+''') if warn else None
   def resolve(arg):
     if(UI.init()==None):
       return (None,None)
@@ -227,15 +227,20 @@ class Utils:
     return df.transpose()
   def dictupdatecounter(dictobj,key='',start=1,incr=1):
     dictobj.update({key:dictobj.setdefault(key,start)+incr})
-  def flatten(lst,result=[]):
-    for x in lst:
-      if(isinstance(x,(list,tuple,set))):
-        Utils.flatten(x,result)
-      elif(isinstance(x,dict)):
-        Utils.flatten((tuple(x.keys()),tuple(x.values())),result)
-      else:
-        result.append(str(x))
-    return result
+  def flatten(lst,*args,result=None,cbfunc=print):
+    _result=[] if(result==None) else result
+    try:
+      for x in lst.items() if isinstance(lst,dict) else lst:
+        if(isinstance(x,(list,tuple,set))):
+          Utils.flatten(x,result=_result,cbfunc=None)
+        elif(isinstance(x,dict)):
+          Utils.flatten((tuple(x.keys()),tuple(x.values())),result=_result,cbfunc=None)
+        else:
+          _result.append(str(x))
+      for x in args:
+        Utils.flatten(x,result=_result,cbfunc=None)
+    except Exception as e: print(e)
+    finally: cbfunc(_result) if cbfunc else None
 class Loop:
   def dbdirectory(server='',type=1247):
     dbr=UI.s.getdbdirectory(server)
@@ -336,8 +341,8 @@ class Loop:
           trec=coll.getnextentry(rec) if forward else coll.getpreventry(rec) 
         else:
           trec=coll.getnextdocument(rec) if forward else coll.getprevdocument(rec) 
-        cb=func(rec,*args,**kwargs) if func!=None else rec
-        aa=(idc,rec,cb) if details else cb
+        _cb=func(rec,*args,**kwargs) if func!=None else rec
+        aa=(idc,rec,_cb) if details else _cb
         result.append(aa) if result!=None else None
         yield aa
         idc=idc+1 if forward else idc-1
@@ -454,7 +459,7 @@ class Loop:
       Loop.runondocs(dc,lambda d1:selids.append(d1.universalid if unid else d1.noteid))
     return(selids)
 
-  def getiddocs(selids=[],db=UI.db):
+  def getiddocs(selids=[],db=None):
     seldocs={}
     if (db==None):
       db=UI.db
@@ -480,10 +485,12 @@ class Loop:
 
 def main():
   try:
-    if(input('Access Notes Workspace? y/(n) > ')=='y'):
-      UI.init()
-    if(input('Access Notes COM Session? y/(n) > ')=='y'):
+    inp=input('Welcome to NotesPy. Choose one of the following options:\n To Access Notes Workspace - Press 1\n To Access Notes COM Session - Press 2\n To Access Both - Press 3\nPress any other key to skip > ')
+    if(inp == '3'):
+      UI.grab()
       UIBack.init()
+    elif(inp == '2'): UIBack.init()
+    elif(inp == '1'): UI.grab()
   except Exception as e:
     print('ERR> ',e)
   finally:
