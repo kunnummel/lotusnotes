@@ -62,7 +62,7 @@ class UIBack:
       return
     UIBack.db=UIBack.s.getdatabase(UIBack.db.server,UIBack.db.filepath) if UIBack.db else None
     if(UI.vw):
-      UIBack.vw=UIBack.db.getView(UI.vw.name)
+      UIBack.vw=UIBack.db.getView(UI.vw.name) if UI.vw.name !='' else UIBack.db.views[0]
       UIBack.vw.autoupdate=False
       UIBack.vn=UIBack.vw.createviewnav()
       UIBack.dc=UIBack.vw.getalldocumentsbykey('\n\n',True)
@@ -82,13 +82,29 @@ class UIBack:
       UIBack.ve=UIBack.vn.getcurrent()
     print(f'''
 UIBack.db > {(UIBack.db.server,UIBack.db.filepath,UIBack.db.title,UIBack.db.replicaid) if UIBack.db else 'n/a'}
-UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UIBack.vw else 'n/a'}
-UIBack.vn/.ve> Position: {(UIBack.ve.getposition('.'),UI.ws.currentview.caretcategory) if UIBack.ve else 'n/a'} 
+UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()} if UIBack.vw.columns else 'n/a') if UIBack.vw else 'n/a'}
+UIBack.vn/.ve> Position: {UIBack.ve.getposition('.')  if UIBack.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory  if UI.ws.currentview.caretcategory!='' else 'n/a'}
 UIBack.doc> {(UIBack.doc.getitemvalue("form")[0],UIBack.doc.universalid,UIBack.doc.noteid,UIBack.doc.size,UIBack.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UIBack.ve.columnvalues)} if UIBack.ve else ('new-doc' if UIBack.doc.isnewnote else 'items-'+str(len(UIBack.doc.items)))) if UIBack.doc else 'n/a'}
 UIBack.dc/.dcs > {UIBack.dc.count if UIBack.dc else 'n/a'}
 ''')
-  def verifydoc(doc):
-    return doc.parentdatabase.parent==UIBack.s
+  def select(vw=None,category=None):
+    if (vw==None and UIBack.vw):
+      vw=UIBack.vw
+    if(vw==None):
+      return (0,None)
+    print('Switch to the Notes Window to select the Document(s)')
+    dc=UI.ws.PickListCollection(3,True,vw.parent.server,vw.parent.filepath,vw.name,'Select Document(s)','Pick one or more documents from the view',category)
+    return(dc.getfirstdocument,dc if dc.count>1 else None,f'{dc.count} documents selected')      
+  def convertdoc(doc):
+    if(doc.parentdatabase.parent==UIBack.s):
+      return doc
+    else:
+      return UIBack.s.resolve(doc.notesurl)
+  def convertdb(db):
+    if(db.parent==UIBack.s):
+      return db
+    else:
+      return UIBack.s.resolve(db.notesurl)
 class UI:
   ws=None
   s=None
@@ -142,8 +158,8 @@ class UI:
       UI.dcs=Loop.iterrecords(UI.dc,lambda x:({x.noteid:list(UI.vn.getentry(x).columnvalues)}))
     print(f'''
 UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid) if UI.db else 'n/a'}
-UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()}) if UI.vw else 'n/a'}
-UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.vw else 'n/a'} 
+UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()} if UI.vw.columns else 'n/a') if UI.vw else 'n/a'}
+UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.ws.currentview.caretcategory!='' else 'n/a'} 
 UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,UI.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UI.ve.columnvalues)} if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
 UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
 ''') if warn else None
@@ -168,17 +184,22 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
       print(vw.caretcategory if vw.caretnoteid==doc.noteid else 'Document could not be located')
   def showwindows(title='HCL Notes',nameit=False):
     try:
-      import win32gui,win32process
+      import win32gui,win32process,psutil
       listnames={}
       def showMe(hs,*args):
-        st=win32gui.GetWindowText(hs)
-        listnames.setdefault(st, []).append([hs,win32process.GetWindowThreadProcessId(hs)])
-        if(not None==title and title in st):        
-          win32gui.ShowWindow(hs,1) if input(f'Show Window - {st} - (Process - {hs}) y/(n) >')=='y' else None
+        wt=win32gui.GetWindowText(hs)
+        sh=not None==title and title.lower() in wt.lower()
+        if(sh or nameit):
+          pid=win32process.GetWindowThreadProcessId(hs)
+          pro=psutil.Process(pid[-1])
+          aa=(pro.name(),pro.pid,pro.ppid(),pro.exe())
+          listnames.setdefault(wt,[]).append(aa) if nameit else None
+          if(sh):        
+            win32gui.ShowWindow(hs,1) if input(f'Show Window - {wt} - ({hs} Process - {aa}) y/(n) >')=='y' else None
       win32gui.EnumWindows(showMe,None)
       if(nameit):
         return dict(sorted(listnames.items()))
-    except:print('error')
+    except:print('showwindows - failed')
   def checkmail(cnt=5):
     UI.init()
     if(UI.s and (not UI.mdb)):
@@ -208,8 +229,16 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
     return(dc.getfirstdocument,dc if dc.count>1 else None)
   def browsefiles(filter=None,save=False):
     return (UI.ws.SaveFileDialog(False,'Save As',filter,'C:\\')) if save else (UI.ws.OpenFileDialog(True,'Open',filter,'C:\\'))
-  def verifydoc(doc):
-    return doc.parentdatabase.parent==UI.s
+  def convertdoc(doc):
+    if(doc.parentdatabase.parent==UI.s):
+      return doc
+    else:
+      return UI.s.resolve(doc.notesurl)   
+  def convertdb(db):
+    if(db.parent==UI.s):
+      return db
+    else:
+      return UI.s.resolve(db.notesurl)
 class Utils:
   def getattachments(doc,details=False):
     att={} if details else []
