@@ -30,7 +30,7 @@ class UIBack:
         return UIBack.user
     else:
       return UIBack.user
-  def evalformula(doc=None,formula='@username'):
+  def eval(formula='@username',doc=None):
     if(UIBack.init()==None):
       return
     try:
@@ -64,6 +64,7 @@ class UIBack:
     if(UI.vw):
       UIBack.vw=UIBack.db.getView(UI.vw.name) if UI.vw.name !='' else UIBack.db.views[0]
       UIBack.vw.autoupdate=False
+      UIBack.cols= {k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()} if UIBack.vw.columns else 'n/a' 
       UIBack.vn=UIBack.vw.createviewnav()
       UIBack.dc=UIBack.vw.getalldocumentsbykey('\n\n',True)
       UIBack.dcs={}
@@ -71,19 +72,20 @@ class UIBack:
         Loop.runondocs(UI.dc,lambda x:UIBack.dc.adddocument(UIBack.db.getdocumentbyid(x.noteid)))
         def aa(x):
           UIBack.vn.gotoentry(x)
-          return ({x.noteid:list(UIBack.vn.getcurrent().columnvalues)})
+          return {x.noteid:UIBack.vn.getcurrent().columnvalues}
         UIBack.dcs=Loop.iterrecords(UIBack.dc,aa)
     try:
       UIBack.doc=UIBack.db.getdocumentbyid(UIBack.vw.caretnoteid)
     except:
-      UIBack.doc=UIBack.db.getdocumentbyid(UI.doc.noteid) if UI.doc else None
+      UIBack.doc=UIBack.db.getdocumentbyid(UI.doc.noteid) if UI.doc and UI.doc.noteid!='0' else None
     if(UIBack.doc and UIBack.vn):
       UIBack.vn.gotoentry(UIBack.doc)
       UIBack.ve=UIBack.vn.getcurrent()
     print(f'''
 UIBack.db > {(UIBack.db.server,UIBack.db.filepath,UIBack.db.title,UIBack.db.replicaid) if UIBack.db else 'n/a'}
-UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UIBack.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()} if UIBack.vw.columns else 'n/a') if UIBack.vw else 'n/a'}
-UIBack.vn/.ve> Position: {UIBack.ve.getposition('.')  if UIBack.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory  if UI.ws.currentview.caretcategory!='' else 'n/a'}
+UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid)}
+UIBack.cols > {UIBack.cols if UIBack.vw else 'n/a'}
+UIBack.vn/.ve> Position: {UIBack.ve.getposition('.')  if UIBack.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory  if UI.vw and UI.ws.currentview.caretcategory!='' else 'n/a'}
 UIBack.doc> {(UIBack.doc.getitemvalue("form")[0],UIBack.doc.universalid,UIBack.doc.noteid,UIBack.doc.size,UIBack.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UIBack.ve.columnvalues)} if UIBack.ve else ('new-doc' if UIBack.doc.isnewnote else 'items-'+str(len(UIBack.doc.items)))) if UIBack.doc else 'n/a'}
 UIBack.dc/.dcs > {UIBack.dc.count if UIBack.dc else 'n/a'}
 ''')
@@ -154,15 +156,17 @@ class UI:
       UI.vw.autoupdate=False
     UI.vn=UI.vw.createviewnav if UI.vw else None
     UI.ve=(UI.vn.getentry(UI.doc) if UI.doc else UI.vn.getprev(UI.vw.getentrybykey(UI.ws.currentview.caretcategory,True))) if UI.vn else None
+    UI.cols= {k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns] for k,v in a.items()} if UI.vw.columns else 'n/a' if UI.vw else 'n/a'
     if(UI.dc):
-      UI.dcs=Loop.iterrecords(UI.dc,lambda x:({x.noteid:list(UI.vn.getentry(x).columnvalues)}))
+      UI.dcs=Loop.iterrecords(UI.dc,lambda x:(x.noteid,UI.vn.getentry(x).columnvalues if UI.vn.getentry(x) else ''))
     print(f'''
-UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid) if UI.db else 'n/a'}
-UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid,{k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns if x.title!='' or x.ishidden] for k,v in a.items()} if UI.vw.columns else 'n/a') if UI.vw else 'n/a'}
-UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.ws.currentview.caretcategory!='' else 'n/a'} 
-UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,UI.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UI.ve.columnvalues)} if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
+UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid,UI.db.size) if UI.db else 'n/a'}
+UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid) if UI.vw else 'n/a'}
+UI.cols> {UI.cols}
+UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.vw and UI.ws.currentview.caretcategory!='' else 'n/a'} 
+UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,"has embedded" if UI.doc.hasembedded else "",UI.doc.parentdocumentUNID,UI.doc.responses.count,UI.ve.columnvalues if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
 UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
-''') if warn else None
+''') if warn else None  
   def resolve(arg):
     if(UI.init()==None):
       return (None,None)
@@ -176,12 +180,10 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
   def locatedoc(doc=None):
     doc=doc if doc else UI.doc
     if(doc):
-      if(not UI.verifydoc(doc)):
-        print('Backend document is not allowed')
-        return
       vw=UI.ws.currentview
-      vw.selectdocument(doc)
+      doc1=vw.selectdocument(doc)
       print(vw.caretcategory if vw.caretnoteid==doc.noteid else 'Document could not be located')
+      return doc1
   def showwindows(title='HCL Notes',nameit=False):
     try:
       import win32gui,win32process,psutil
@@ -236,7 +238,7 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
       return UI.s.resolve(doc.notesurl)   
   def convertdb(db):
     if(db.parent==UI.s):
-      return db
+      return db 
     else:
       return UI.s.resolve(db.notesurl)
 class Utils:
@@ -249,10 +251,9 @@ class Utils:
             f=doc.getattachment(y)
             att.update({f.name:(f,f.filesize,f.source)}) if details else att.append(f)
     return {doc.noteid:att} if details else att
-
-  def dataframe(dcs=None):
+  def dataframe(dcs=None,**kwargs):
     import pandas as pd
-    df = pd.DataFrame(dcs if dcs else list(UI.dcs))
+    df = pd.DataFrame(dcs if dcs else list(UI.dcs),**kwargs)
     return df.transpose()
   def dictupdatecounter(dictobj,key='',start=1,incr=1):
     dictobj.update({key:dictobj.setdefault(key,start)+incr})
@@ -287,7 +288,7 @@ class Loop:
       for xx in x:
         wbs.append(['\n'.join([str(z) for z in y]) if isinstance(y,tuple) else str(y) for y in xx])
       wb.save(file)
-    Loop.runondocs(dc,f,*args,callback=aa,**kwargs)
+    Loop.runondocs(dc,f,*args,cbfunc=aa,**kwargs)
     wb.close()
     print ("-- Generated file ",file) 
   def exportasjson(dc,f,*args,**kwargs):
@@ -296,9 +297,35 @@ class Loop:
       for xx in x:
         wbs.append(['\n'.join([str(z) for z in y]) if isinstance(y,tuple) else str(y) for y in xx])
     
-    Loop.runondocs(dc,f,*args,callback=aa,**kwargs)
+    Loop.runondocs(dc,f,*args,cbfunc=aa,**kwargs)
     return wbs
-
+  def dbproperties(db=None):
+      db=UI.db if db==None else db
+      props={}
+      if(db==None): return props      
+      props['agents']=sorted([i.name for i in db.agents])
+      props['forms']=sorted([i.name for i in db.forms])
+      props['views']=sorted([i.name for i in db.views])
+      acl=db.acl
+      acle=acl.getfirstentry
+      props['acl']={'roles':acl.roles,'names':[],'managers':db.managers}
+      while not acle is None:
+          props['acl']['names'].append((acle.name,acle.level,acle.roles))
+          acle=acl.getnextentry(acle)
+      props['created']=db.created
+      return props
+  def viewdocfields(dc,fields):
+    _fields=fields.split(',') if isinstance(fields,str) else fields
+    _a={}
+    for x in _fields:
+      _a[x]=tuple()
+    def aa(x,f=_fields):
+      try:
+        [_a.update({y:_a[y]+x.getitemvalue(y)}) for y in f]
+      except Exception as e:
+        print('ERR> ',e)
+    Loop.runondocs(dc,aa)
+    return _a
   def exportdocfields(dc,fields,file='C:/temp/tempfile.xlsx'):
     from openpyxl import Workbook
     wb=Workbook()
@@ -314,11 +341,11 @@ class Loop:
     wb.save(file)
     wb.close()
     print ("-- Generated file ",file)      
-  def docvaluescount(dc=None,itms=['form']):
+  def docvaluescount(itms=['form'],dc=None):
     aa={}
     if(dc==None):
-      dc=UI.vw
-    Loop.runondocs(dc,lambda x:[aa.update({x.getitemvalue(y)[0]:aa.dictobj.setdefault(x.getitemvalue(y)[0],1)+1}) for y in itms])
+      dc=UI.dc
+    Loop.runondocs(dc,lambda x:[aa.update({x.getitemvalue(y)[0]:aa.setdefault(x.getitemvalue(y)[0],1)+1}) for y in itms])
     if(len(aa)>0):
       return(aa)
     return None
@@ -514,7 +541,7 @@ class Loop:
 
 def main():
   try:
-    inp=input('Welcome to NotesPy. Choose one of the following options:\n To Access Notes Workspace - Press 1\n To Access Notes COM Session - Press 2\n To Access Both - Press 3\nPress any other key to skip > ')
+    inp=input('Welcome to Kunnus NotesPy (www.kunnummel.com). Choose one of the following options:\n To Access Notes Workspace - Press 1\n To Access Notes COM Session - Press 2\n To Access Both - Press 3\nPress any other key to skip > ')
     if(inp == '3'):
       UI.grab()
       UIBack.init()
