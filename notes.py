@@ -19,11 +19,11 @@ class UIBack:
       try:
         from win32com.client import Dispatch
         UIBack.s=Dispatch('Lotus.NotesSession')
-        UIBack.user=UIBack.s.username
+        UIBack.user=UIBack.s.usernameobject
       except:
         try:
           UIBack.s.initialize()
-          UIBack.user=UIBack.s.username
+          UIBack.user=UIBack.s.usernameobject
         except Exception as e:
           print(e)
       finally:
@@ -54,7 +54,7 @@ class UIBack:
   def grab():
     if(UIBack.init()==None):
       return
-    if(input("Retrieve backend data (COM) for the currently active 'Notes UI'? - (y)/n => ")=='n'):
+    if(input("Retrieve the backend data (COM) from the currently active 'Notes UI'? - (y)/n => ")=='n'):
       return
     UI.grab(False)
     UIBack.db=UI.db
@@ -74,6 +74,8 @@ class UIBack:
           UIBack.vn.gotoentry(x)
           return {x.noteid:UIBack.vn.getcurrent().columnvalues}
         UIBack.dcs=Loop.iterrecords(UIBack.dc,aa)
+    else:
+        UIBack.vw = UIBack.cols = UIBack.vn = UIBack.dc = UIBack.dcs = None
     try:
       UIBack.doc=UIBack.db.getdocumentbyid(UIBack.vw.caretnoteid)
     except:
@@ -81,21 +83,27 @@ class UIBack:
     if(UIBack.doc and UIBack.vn):
       UIBack.vn.gotoentry(UIBack.doc)
       UIBack.ve=UIBack.vn.getcurrent()
-    print(f'''
-UIBack.db > {(UIBack.db.server,UIBack.db.filepath,UIBack.db.title,UIBack.db.replicaid) if UIBack.db else 'n/a'}
-UIBack.vw > {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid)}
-UIBack.cols > {UIBack.cols if UIBack.vw else 'n/a'}
-UIBack.vn/.ve> Position: {UIBack.ve.getposition('.')  if UIBack.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory  if UI.vw and UI.ws.currentview.caretcategory!='' else 'n/a'}
+    UIBack.show()
+  def show():
+    if(UIBack.s):
+      print(f'''
+UIBack.s> COM/Back-end Session is Active - UIBack.user> {UIBack.user.canonical if UIBack.user else None}
+UIBack.db> {(UIBack.db.server,UIBack.db.filepath,UIBack.db.title,UIBack.db.replicaid) if UIBack.db else 'n/a'}
+UIBack.vw> {(UIBack.vw.name,UIBack.vw.aliases,(UIBack.vw.entrycount,UIBack.vw.toplevelentrycount),UIBack.vw.universalid) if UIBack.vw else None}
+UIBack.cols> {UIBack.cols if UIBack.vw else 'n/a'}
+UIBack.vn/.ve> Position: {UIBack.ve.getposition('.')  if UIBack.ve else 'n/a'}, Cursor Category: {UI.uivw.caretcategory  if UI.vw and UI.uivw.caretcategory!='' else 'n/a'}
 UIBack.doc> {(UIBack.doc.getitemvalue("form")[0],UIBack.doc.universalid,UIBack.doc.noteid,UIBack.doc.size,UIBack.doc.hasembedded,{a[0]+1:str(a[1]) for a in enumerate(UIBack.ve.columnvalues)} if UIBack.ve else ('new-doc' if UIBack.doc.isnewnote else 'items-'+str(len(UIBack.doc.items)))) if UIBack.doc else 'n/a'}
-UIBack.dc/.dcs > {UIBack.dc.count if UIBack.dc else 'n/a'}
+UIBack.dc/.dcs> {UIBack.dc.count if UIBack.dc else 'n/a'}
 ''')
   def select(vw=None,category=None):
     if (vw==None and UIBack.vw):
       vw=UIBack.vw
     if(vw==None):
-      return (0,None)
-    print('Switch to the Notes Window to select the Document(s)')
-    dc=UI.ws.PickListCollection(3,True,vw.parent.server,vw.parent.filepath,vw.name,'Select Document(s)','Pick one or more documents from the view',category)
+      return (None,None)    
+    if UI.uivw:
+      UI.uivw.deselectall 
+    print('Switch to the Notes Window and select the Document(s)')
+    dc=UI.ws.PickListCollection(3,True,vw.parent.server,vw.parent.filepath,vw.name,'Select Document(s)',f'{(vw.parent.server,vw.parent.filepath,vw.name)}',category)
     return(dc.getfirstdocument,dc if dc.count>1 else None,f'{dc.count} documents selected')      
   def convertdoc(doc):
     if(doc.parentdatabase.parent==UIBack.s):
@@ -121,13 +129,15 @@ class UI:
   dc=None
   dcs=None
   user=None
+  uidoc=None
+  uivw=None
   def init():
     try:
       if(UI.user==None):
         from win32com.client import Dispatch
         UI.ws=Dispatch('Notes.NotesUIWorkspace')
         UI.s=Dispatch('Notes.NotesSession')
-        UI.user=UI.s.username
+        UI.user=UI.s.usernamelist[0]
     except: pass
     finally: return UI.user 
   def grab(warn=True):
@@ -136,36 +146,45 @@ class UI:
     if(warn):
       if(input("Retrieve currently active 'Notes UI' data? - (y)/n => ")=='n'):
         return
-    UI.user=UI.s.username
+    UI.user=UI.s.usernamelist[0]
     while True:
       UI.db=UI.ws.currentdatabase
       if(UI.db or input("No active Database objects found. Try again (y)/n => ")=='n'):
           break
     if(UI.db==None):
       return
-    UI.vw=UI.ws.currentview
-    UI.dc=UI.vw.documents if UI.vw else None
+    UI.uivw=UI.ws.currentview
+    UI.dc=UI.uivw.documents if UI.uivw else None
     UI.db=UI.db.database if UI.db else None
     try:
-      UI.doc=UI.db.getdocumentbyid(UI.vw.caretnoteid)
+      UI.doc=UI.db.getdocumentbyid(UI.uivw.caretnoteid)
     except:
-      UI.doc=UI.ws.currentdocument
-      UI.doc=UI.doc.document if UI.doc else None
-    if(UI.vw):
-      UI.vw=UI.vw.view
+      UI.uidoc=UI.ws.currentdocument
+      UI.doc=UI.uidoc.document if UI.uidoc else None
+    if(UI.uivw):
+      UI.vw=UI.uivw.view
       UI.vw.autoupdate=False
-    UI.vn=UI.vw.createviewnav if UI.vw else None
-    UI.ve=(UI.vn.getentry(UI.doc) if UI.doc else UI.vn.getprev(UI.vw.getentrybykey(UI.ws.currentview.caretcategory,True))) if UI.vn else None
-    UI.cols= {k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns] for k,v in a.items()} if UI.vw.columns else 'n/a' if UI.vw else 'n/a'
+      UI.vn=UI.vw.createviewnav if UI.vw else None
+      UI.ve=(UI.vn.getentry(UI.doc) if UI.doc else UI.vn.getprev(UI.vw.getentrybykey(UI.ws.currentview.caretcategory,True))) if UI.vn else None
+      UI.cols= ({k:v for a in [{x.position:x.title+(' (H)' if x.ishidden else '')} for x in UI.vw.columns] for k,v in a.items()} if UI.vw.columns else 'n/a') if UI.vw else 'n/a'
+    else:
+        UI.vw = UI.vn = UI.ve = UI.cols = None
     if(UI.dc):
       UI.dcs=Loop.iterrecords(UI.dc,lambda x:(x.noteid,UI.vn.getentry(x).columnvalues if UI.vn.getentry(x) else ''))
-    print(f'''
-UI.db > {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid,UI.db.size) if UI.db else 'n/a'}
-UI.vw > {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid) if UI.vw else 'n/a'}
+    UI.show(warn)
+  def show(warn=True):
+    if(UI.s):
+      print(f'''
+UI.s> Session is Active - UI.user> {UI.user.canonical if UI.user else None}
+UI.ws> {'Workspace is Active' if UI.ws else 'None'}
+UI.db> {(UI.db.server,UI.db.filepath,UI.db.title,UI.db.replicaid,UI.db.size) if UI.db else 'n/a'}
+UI.uivw> {UI.uivw.viewname if UI.uivw else None}
+UI.vw> {(UI.vw.name,UI.vw.aliases,(UI.vw.entrycount,UI.vw.toplevelentrycount),UI.vw.universalid) if UI.vw else 'n/a'}
 UI.cols> {UI.cols}
-UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.ws.currentview.caretcategory if UI.vw and UI.ws.currentview.caretcategory!='' else 'n/a'} 
+UI.vn/.ve> Position: {UI.ve.getposition('.') if UI.ve else 'n/a'}, Cursor Category: {UI.uivw.caretcategory if UI.vw and UI.uivw.caretcategory!='' else 'n/a'} 
+UI.uidoc> {UI.uidoc.windowtitle if UI.uidoc else None}
 UI.doc> {(UI.doc.form[0],UI.doc.universalid,UI.doc.noteid,UI.doc.size,"has embedded" if UI.doc.hasembedded else "",UI.doc.parentdocumentUNID,UI.doc.responses.count,UI.ve.columnvalues if UI.ve else ('new-doc' if UI.doc.isnewnote else 'items-'+str(len(UI.doc.items)))) if UI.doc else 'n/a'}
-UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
+UI.dc/.dcs> {UI.dc.count if UI.dc else 'n/a'}
 ''') if warn else None  
   def resolve(arg):
     if(UI.init()==None):
@@ -226,9 +245,11 @@ UI.dc/.dcs > {UI.dc.count if UI.dc else 'n/a'}
       vw=UI.vw
     if(vw==None):
       return (0,None)
+    if UI.uivw:
+      UI.uivw.deselectall 
     print('Switch to the Notes Window to select the Document(s)')
     dc=UI.ws.PickListCollection(3,True,vw.parent.server,vw.parent.filepath,vw.name,'Select Document(s)','Pick one or more documents from the view',category)
-    return(dc.getfirstdocument,dc if dc.count>1 else None)
+    return(dc.getfirstdocument,dc if dc.count>1 else None,f'{dc.count} documents selected')
   def browsefiles(filter=None,save=False):
     return (UI.ws.SaveFileDialog(False,'Save As',filter,'C:\\')) if save else (UI.ws.OpenFileDialog(True,'Open',filter,'C:\\'))
   def convertdoc(doc):
@@ -250,6 +271,8 @@ class Utils:
           for y in x.values:
             f=doc.getattachment(y)
             att.update({f.name:(f,f.filesize,f.source)}) if details else att.append(f)
+    if len(att)==0:
+        att=None
     return {doc.noteid:att} if details else att
   def dataframe(dcs=None,**kwargs):
     import pandas as pd
@@ -299,21 +322,6 @@ class Loop:
     
     Loop.runondocs(dc,f,*args,cbfunc=aa,**kwargs)
     return wbs
-  def dbproperties(db=None):
-      db=UI.db if db==None else db
-      props={}
-      if(db==None): return props      
-      props['agents']=sorted([i.name for i in db.agents])
-      props['forms']=sorted([i.name for i in db.forms])
-      props['views']=sorted([i.name for i in db.views])
-      acl=db.acl
-      acle=acl.getfirstentry
-      props['acl']={'roles':acl.roles,'names':[],'managers':db.managers}
-      while not acle is None:
-          props['acl']['names'].append((acle.name,acle.level,acle.roles))
-          acle=acl.getnextentry(acle)
-      props['created']=db.created
-      return props
   def viewdocfields(dc,fields):
     _fields=fields.split(',') if isinstance(fields,str) else fields
     _a={}
@@ -497,6 +505,22 @@ class Loop:
         e1=e2
       if(cbfunc):
         cbfunc(idc)
+  def columnvaluesbykey(ec,colnos=None,key=None,cbfunc=None,**kwargs):
+      ec1=ec
+      if(ec):
+          try:
+              if(key==None):
+                  ec1=UI.vw.allentries
+                  ec1.intersect(ec) if UI.vw else ec
+              else:    
+                  ec1=ec.getallentriesbykey(key,True)
+              a=[]
+              Loop.runonentries(ec1,lambda x:a.append(x.columnvalues[colnos] if type(colnos)==int else [x.columnvalues[col] for col in range(0,len(UI.vw.columns)) if colnos==None or col in colnos]))
+              if(cbfunc):
+                  return cbfunc(a)
+              return a
+          except Exception as e:
+              print('ERR> ',ec,colnos,key,e)
   def stop(*args,key='ctrl+c'):
     try:
       import keyboard
@@ -522,7 +546,24 @@ class Loop:
     for id in selids:
       seldocs.update({id:db.getdocumentbyunid(id) if len(id)==32 else db.getdocumentbyid(id)})
     return(seldocs)
-
+  def dbproperties(db=None):
+      db=UI.db if db==None else db
+      props={}
+      if(db==None): return props      
+      props['agents']=sorted([i.name for i in db.agents])
+      props['forms']=sorted([i.name for i in db.forms])
+      props['views']=sorted([i.name for i in db.views])
+      acl=db.acl
+      try:
+        acle=acl.getfirstentry()
+      except:
+        acle=acl.getfirstentry
+      props['acl']={'roles':acl.roles,'names':[],'managers':db.managers}
+      while not acle is None:
+          props['acl']['names'].append((acle.name,acle.level,acle.roles))
+          acle=acl.getnextentry(acle)
+      props['created']=db.created
+      return props
   def comprops(obj=[],prop=['name']):
     if(not isinstance(obj,(list,tuple))):
       obj=[obj]
@@ -541,7 +582,7 @@ class Loop:
 
 def main():
   try:
-    inp=input('Welcome to Kunnus NotesPy (www.kunnummel.com). Choose one of the following options:\n To Access Notes Workspace - Press 1\n To Access Notes COM Session - Press 2\n To Access Both - Press 3\nPress any other key to skip > ')
+    inp=input(f'{'-.'*50}\n\n\nWelcome to Kunnus NotesPy (www.kunnummel.com). Choose one of the following options:\n\n To Access Notes Workspace\t- Enter 1\n To Access Notes COM Session\t- Enter 2\n To Access UI and Backend\t- Enter 3\n\nEnter to skip > ')
     if(inp == '3'):
       UI.grab()
       UIBack.init()
@@ -550,7 +591,7 @@ def main():
   except Exception as e:
     print('ERR> ',e)
   finally:
-    print(f'Global>> UI.ws>{'Workspace' if UI.ws else None}, UI.s>{UI.s.username if UI.s else None}, UIBack.s>{UIBack.user}, Loop, Utils')
+    print(f'Globals>> UI.ws> {'Workspace' if UI.ws else None}, UI.s> {'Active - UI.user> '+ UI.user.canonical if UI.user else None}, UIBack.s> {'Active - UIBack.user> '+UIBack.user.canonical if UIBack.user else None}, Loop, Utils')
 
 if __name__ == "__main__":
   main()
